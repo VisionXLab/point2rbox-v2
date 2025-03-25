@@ -91,20 +91,23 @@ class ConvertWeakSupervision(BaseTransform):
                  hbox_proportion: float = 0.3, 
                  point_dummy: float = 1,
                  hbox_dummy: float = 0,
-                 modify_labels: bool = False) -> None:
+                 modify_labels: bool = False,
+                 shield: bool = False) -> None:
         self.point_proportion = point_proportion
         self.hbox_proportion = hbox_proportion
         self.point_dummy = point_dummy
         self.hbox_dummy = hbox_dummy
         self.modify_labels = modify_labels
+        self.shield = shield  # 为何如此丝滑，拿过来咀嚼一下
 
     def transform(self, results: dict) -> dict:
         """The transform function."""
 
         max_idx_p = int(round(results['gt_bboxes'].tensor.shape[0] * self.point_proportion))
-        results['gt_bboxes'].tensor[:max_idx_p, 2] = self.point_dummy
-        results['gt_bboxes'].tensor[:max_idx_p, 3] = self.point_dummy
-        results['gt_bboxes'].tensor[:max_idx_p, 4] = 0
+        if not self.shield:
+            results['gt_bboxes'].tensor[:max_idx_p, 2] = self.point_dummy
+            results['gt_bboxes'].tensor[:max_idx_p, 3] = self.point_dummy
+            results['gt_bboxes'].tensor[:max_idx_p, 4] = 0
 
         max_idx_h = max_idx_p + int(round(results['gt_bboxes'].tensor.shape[0] * self.hbox_proportion))
         results['gt_bboxes'][max_idx_p:max_idx_h] = \

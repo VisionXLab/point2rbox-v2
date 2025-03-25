@@ -234,7 +234,7 @@ class Point2RBoxV2(SingleStageDetector):
         batch_gt_instances, _, batch_img_metas = unpack_gt_instances(batch_data_samples)
 
         # Set bids for original images and gts
-        # bids: long (N, 4) (batch, syn, view, instance)
+        # bids: long (N, 4) (batch_id based 0, syn, view, obj_id based 1)
         offset = 1
         for i, gt_instances in enumerate(batch_gt_instances):
             blen = len(gt_instances.bboxes)

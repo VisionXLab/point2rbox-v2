@@ -8,7 +8,7 @@ angle_version = 'le90'
 model = dict(
     type='Point2RBoxV2',
     ss_prob=[0.68, 0.07, 0.25],
-    copy_paste_start_epoch=6,
+    copy_paste_start_epoch=0,
     data_preprocessor=dict(
         type='mmdet.DetDataPreprocessor',
         mean=[123.675, 116.28, 103.53],
@@ -39,7 +39,7 @@ model = dict(
         num_classes=15,
         in_channels=128,
         feat_channels=128,
-        strides=[8],
+        strides=[8, 16, 32],
         edge_loss_start_epoch=6,
         joint_angle_start_epoch=1,
         voronoi_type='standard',
@@ -85,7 +85,7 @@ train_pipeline = [
     dict(type='mmdet.LoadImageFromFile', backend_args={{_base_.backend_args}}),
     dict(type='mmdet.LoadAnnotations', with_bbox=True, box_type='qbox'),
     dict(type='ConvertBoxType', box_type_mapping=dict(gt_bboxes='rbox')),
-    dict(type='ConvertWeakSupervision', point_proportion=1., hbox_proportion=0),
+    dict(type='ConvertWeakSupervision', point_proportion=1., hbox_proportion=0, shield=True),
     dict(type='mmdet.Resize', scale=(1024, 1024), keep_ratio=True),
     dict(
         type='mmdet.RandomFlip',

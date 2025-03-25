@@ -7,7 +7,7 @@ import torch.nn as nn
 from mmcv.cnn import Scale, ConvModule
 from mmdet.models.dense_heads import AnchorFreeHead
 from mmdet.models.utils import (filter_scores_and_topk, multi_apply,
-                                select_single_mlvl, unpack_gt_instances)
+                                select_single_mlvl, unpack_gt_instances, multi_apply)
 from mmdet.structures import SampleList
 from mmdet.structures.bbox import cat_boxes
 from mmdet.utils import (ConfigType, InstanceList, OptConfigType,
@@ -59,7 +59,7 @@ class Point2RBoxV2Head(AnchorFreeHead):
     def __init__(self,
                  num_classes: int,
                  in_channels: int,
-                 strides: list = [8],
+                 strides: list = [8, 16, 32],
                  regress_ranges: list = [(-1, 1e8)],
                  center_sampling: bool = True,
                  center_sample_radius: float = 0.75,
@@ -149,28 +149,32 @@ class Point2RBoxV2Head(AnchorFreeHead):
         self.conv_gate = nn.Conv2d(self.feat_channels, 1, 3, padding=1)
         
     def forward(
-            self, x: Tuple[Tensor]
+            self, feats: Tuple[Tensor]
     ) -> Tuple[List[Tensor], List[Tensor], List[Tensor]]:
         """Forward features from the upstream network.
 
         Args:
             feats (tuple[Tensor]): Features from the upstream network, each is
-                a 4D-tensor.
+                a 4D-tensor, particularly, in point2rboxv2, len(x) == 3.
 
         Returns:
             tuple: A tuple of each level outputs.
 
-            - cls_scores (list[Tensor]): Box scores for each scale level, \
+            - cls_scores (Tensor): Box scores for each scale level, \
             each is a 4D-tensor, the channel number is \
             num_points * num_classes.
-            - bbox_preds (list[Tensor]): Box energies / deltas for each \
+            - bbox_preds (Tensor): Box energies / deltas for each \
             scale level, each is a 4D-tensor, the channel number is \
-            num_points * 4.
-            - centernesses (list[Tensor]): centerness for each scale level, \
-            each is a 4D-tensor, the channel number is num_points * 1.
+            num_points * 4, attention, the stride is already multiplied.
+            - angle_preds (Tensor): Angle encode for each scale level, \
+            each is a 4D-tensor, the channel number is 3, see PSC in \    
+            https://ieeexplore.ieee.org/document/10475581?reason=concurrency.
         """
-        cls_feat = x[0]
-        reg_feat = x[0]
+        return multi_apply(self.single_level_forward, feats, self.strides)
+        
+    def single_level_forward(self, feat: Tensor, stride: int) -> List[Tensor]:
+        cls_feat = feat
+        reg_feat = feat
 
         for cls_layer in self.cls_convs:
             cls_feat = cls_layer(cls_feat)
@@ -186,7 +190,7 @@ class Point2RBoxV2Head(AnchorFreeHead):
         sig_y = bbox_pred[:, 1].exp()
         dx = bbox_pred[:, 2].sigmoid() * 2 - 1  # (-1, 1)
         dy = bbox_pred[:, 3].sigmoid() * 2 - 1  # (-1, 1)
-        bbox_pred = torch.stack((sig_x, sig_y, dx, dy), 1) * 8
+        bbox_pred = torch.stack((sig_x, sig_y, dx, dy), 1) * stride
 
         return (cls_score,), (bbox_pred,), (angle_pred,)
     
