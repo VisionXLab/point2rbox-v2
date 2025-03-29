@@ -7,7 +7,7 @@ import torch.nn as nn
 from mmcv.cnn import Scale, ConvModule
 from mmdet.models.dense_heads import AnchorFreeHead
 from mmdet.models.utils import (filter_scores_and_topk, multi_apply,
-                                select_single_mlvl, unpack_gt_instances, multi_apply)
+                                select_single_mlvl, unpack_gt_instances)
 from mmdet.structures import SampleList
 from mmdet.structures.bbox import cat_boxes
 from mmdet.utils import (ConfigType, InstanceList, OptConfigType,
