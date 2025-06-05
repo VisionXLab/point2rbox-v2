@@ -89,8 +89,12 @@ class Point2RBoxV2Head(AnchorFreeHead):
                      type='GWDLoss', loss_weight=5.0),
                  loss_overlap: ConfigType = dict(
                      type='GaussianOverlapLoss', loss_weight=10.0),
-                 loss_voronoi: ConfigType = dict(
-                     type='VoronoiWatershedLoss', loss_weight=5.0),
+                loss_voronoi: ConfigType = dict(
+                    type='VoronoiWatershedLoss', 
+                    loss_weight=5.0,
+                    large_scale_classes=None,  # 添加大尺度类别参数
+                    kernel_size=5,             # 添加高斯模糊核大小参数
+                    gaussian_sigma=1.0),
                  loss_bbox_edg: ConfigType = dict(
                      type='EdgeLoss', loss_weight=0.3),
                  loss_ss=dict(
@@ -243,18 +247,6 @@ class Point2RBoxV2Head(AnchorFreeHead):
                     if distance < distance_threshold:
                         close_mask[i, j] = True
                         close_mask[j, i] = True
-                        # 打印成功匹配的实例对
-                        print(f"匹配的实例对: {label_pair}, 距离: {distance.item()}")
-                    else:
-                        print(f"未匹配的实例对: {label_pair}, 距离: {distance.item()}")
-                        # Visualize the unmatched instance pairs
-                        import matplotlib.pyplot as plt
-                        plt.figure(figsize=(6, 6))
-                        plt.scatter(mu[:, 0].cpu(), mu[:, 1].cpu(), c=labels.cpu(), cmap='tab10', s=50)
-                        plt.plot([mu[i, 0].cpu(), mu[j, 0].cpu()], [mu[i, 1].cpu(), mu[j, 1].cpu()], 'r--')
-                        plt.title(f"Unmatched Pair: {label_pair}, Distance: {distance.item():.2f}")
-                        plt.show()
-        
         return close_mask
 
 

@@ -65,6 +65,7 @@ model = dict(
                 'basketball-court': 8, 'storage-tank': 9, 'soccer-ball-field': 10, 
                 'roundabout': 11, 'harbor': 12, 'swimming-pool': 13, 'helicopter': 14
             },
+            # large_scale_classes=[1,2,3,7,8,10,11,12,13]
             class_pairs=[                    # 类别对列表
                 ('soccer-ball-field', 'ground-track-field'),  # 足球场和田径场
             ]
@@ -81,9 +82,13 @@ model = dict(
             # ,debug=True
             ),
         loss_voronoi=dict(
-            type='VoronoiWatershedLoss', loss_weight=5.0
-            # ,debug=True
-            ),
+            type='VoronoiWatershedLoss', 
+            loss_weight=5.0,
+            # large_scale_classes=[1,2,3,7,8,10,11,12,13],  # DOTA大尺度类别
+            kernel_size=9,              # 高斯模糊核大小
+            gaussian_sigma=3,         # 注意：参数名已改为 gaussian_sigma
+            debug=True
+        ),
         loss_bbox_edg=dict(
             type='EdgeLoss', loss_weight=0.3),
         loss_ss=dict(

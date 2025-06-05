@@ -214,163 +214,221 @@ def gaussian_2d(xy, mu, sigma, normalize=False):
         t0 = t0 / (2 * np.pi * sigma.det().clamp(1e-7).sqrt())
     return t0
 
-
-
-import matplotlib.pyplot as plt
-plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans', 'Arial Unicode MS', 'Arial']
-plt.rcParams['axes.unicode_minus'] = False
-
-def plot_gaussian_voronoi_watershed(*images, labels=None, class_names=None):
-    """Plot figures for debug with voronoi boundaries and colored watershed masks.
+def plot_gaussian_voronoi_watershed(original_image, cls_bg, markers, blurred_image=None, 
+                                    labels=None, class_names=None):
+    """Plot figures for debug with 2x3 layout showing different processing stages.
     
     Args:
-        *images: Variable number of images (image, cls_bg, markers, ...)
+        original_image: Original input image tensor (C, H, W)
+        cls_bg: Class background image from voronoi diagram
+        markers: Watershed result markers
+        blurred_image: Image after Gaussian blur (optional)
         labels: Tensor containing class labels for each instance
         class_names: List of class names for legend
+    
+    Layout:
+        Row 1: Original Image | Pure Voronoi | Pure Watershed
+        Row 2: Blurred Image | Original+Voronoi Boundaries | Watershed Mask+Original
     """
     import matplotlib.pyplot as plt
     from matplotlib.colors import ListedColormap
     import matplotlib.patches as mpatches
     import numpy as np
+    import time
+    from scipy import ndimage
     
-    # 调整图片大小以容纳图例
-    fig_width = len(images) * 4 + 2  # 额外空间给图例
-    plt.figure(dpi=300, figsize=(fig_width, 4))
-    plt.tight_layout()
+    # 设置字体
+    plt.rcParams['font.sans-serif'] = ['SimHei', 'DejaVu Sans', 'Arial Unicode MS', 'Arial']
+    plt.rcParams['axes.unicode_minus'] = False
     
-    for i in range(len(images)):
-        img = images[i]
-        img = (img - img.min()) / (img.max() - img.min())
-        if img.dim() == 3:
-            img = img.permute(1, 2, 0)
-        img = img.detach().cpu().numpy()
-        plt.subplot(1, len(images), i + 1)
-        
-        # 对于第一张图（原图），叠加维诺图边界和分水岭mask
-        if i == 0 and len(images) >= 3:
-            # 显示原图
-            plt.imshow(img, cmap='gray' if len(img.shape) == 2 else None)
-            
-            # 获取cls_bg和markers
-            cls_bg = images[1]  # 类别背景图
-            markers = images[2]  # 分水岭结果
-            
-            cls_bg_np = cls_bg.detach().cpu().numpy()
-            markers_np = markers.detach().cpu().numpy()
-            
-            # 1. 绘制维诺图边界（鲜艳红色线条）
-            # 找到边界：cls_bg中值为15的位置是背景，边界就是这些区域的边缘
-            voronoi_boundary = np.zeros_like(cls_bg_np, dtype=bool)
-            
-            # 使用形态学操作找到不同区域之间的边界
-            from scipy import ndimage
-            import time
-            # 对于每个非背景区域，找到其边界
-            unique_regions = np.unique(cls_bg_np)
-            for region_id in unique_regions:
-                if region_id != 15 and region_id != -1:  # 排除背景和无效区域
-                    region_mask = (cls_bg_np == region_id)
-                    # 膨胀然后减去原区域得到边界
-                    dilated = ndimage.binary_dilation(region_mask)
-                    boundary = dilated & ~region_mask
-                    voronoi_boundary |= boundary
-            
-            # 绘制维诺图边界
-            if voronoi_boundary.any():
-                # 创建边界的轮廓
-                y_coords, x_coords = np.where(voronoi_boundary)
-                plt.scatter(x_coords, y_coords, c='red', s=0.1, alpha=0.8)
-            
-            # 2. 绘制分水岭结果的彩色透明mask
-            if labels is not None:
-                labels_np = labels.detach().cpu().numpy()
-                unique_labels = np.unique(labels_np)
-                
-                # 生成鲜明的颜色
-                colors = plt.cm.tab10(np.linspace(0, 1, 10))  # 使用tab10颜色映射
-                if len(unique_labels) > 10:
-                    # 如果类别超过10个，使用更多颜色
-                    colors = plt.cm.tab20(np.linspace(0, 1, 20))
-                
-                # 为每个类别创建mask并叠加显示
-                for idx, label in enumerate(unique_labels):
-                    # 找到属于该类别的实例索引
-                    class_instances = np.where(labels_np == label)[0]
-                    
-                    # 创建该类别的总mask
-                    class_mask = np.zeros_like(markers_np, dtype=bool)
-                    for instance_idx in class_instances:
-                        # markers中实例的标签是从1开始的
-                        instance_mask = (markers_np == instance_idx + 1)
-                        class_mask |= instance_mask
-                    
-                    if class_mask.any():
-                        # 创建彩色透明mask
-                        color_rgba = colors[idx % len(colors)]
-                        
-                        # 创建RGBA图像用于透明叠加
-                        overlay = np.zeros((*class_mask.shape, 4))
-                        overlay[class_mask] = [*color_rgba[:3], 0.5]  # 50% 透明度
-                        
-                        # 叠加显示
-                        plt.imshow(overlay, alpha=0.7)
-                
-                # 创建图例并放在图片外面
-                legend_patches = []
-                for idx, label in enumerate(unique_labels):
-                    if class_names is not None and label < len(class_names):
-                        class_name = class_names[label]
-                    else:
-                        class_name = f'类别 {label}'
-                    
-                    color_rgba = colors[idx % len(colors)]
-                    legend_patches.append(
-                        mpatches.Patch(color=color_rgba[:3], 
-                                     label=class_name, alpha=0.7)
-                    )
-                
-                # 将图例放在图片右侧外面
-                if legend_patches:
-                    plt.legend(handles=legend_patches, 
-                             bbox_to_anchor=(1.05, 1), 
-                             loc='upper left',
-                             fontsize=8, 
-                             fancybox=True, 
-                             shadow=True)
-            
-            # 添加标题说明
-            plt.title('原图+维诺图边界(红)+分水岭mask', fontsize=10)
-            
-        elif i == 3:
-            plt.imshow(img)
-            x = np.linspace(0, 1024, 1024)
-            y = np.linspace(0, 1024, 1024)
-            X, Y = np.meshgrid(x, y)
-            plt.contourf(X, Y, img, levels=8, cmap=plt.get_cmap('magma'))
-            plt.title('高斯分布', fontsize=10)
+    # 创建2x3的子图布局
+    fig, axes = plt.subplots(2, 3, figsize=(15, 10), dpi=300)
+    plt.tight_layout(pad=3.0)
+    
+    # 转换张量为numpy数组
+    if original_image.dim() == 3:
+        orig_img = original_image.permute(1, 2, 0).detach().cpu().numpy()
+    else:
+        orig_img = original_image.detach().cpu().numpy()
+    
+    # 归一化图像到[0,1]
+    orig_img = (orig_img - orig_img.min()) / (orig_img.max() - orig_img.min())
+    
+    cls_bg_np = cls_bg.detach().cpu().numpy()
+    markers_np = markers.detach().cpu().numpy()
+    
+    # 准备颜色映射
+    colors = plt.cm.tab20(np.linspace(0, 1, 20)) if labels is not None else None
+    
+    # === 第一行第一列：原图 ===
+    ax = axes[0, 0]
+    ax.imshow(orig_img, cmap='gray' if len(orig_img.shape) == 2 else None)
+    ax.set_title('原图', fontsize=12, fontweight='bold')
+    ax.axis('off')
+    
+    # === 第一行第二列：纯维诺图 ===
+    ax = axes[0, 1]
+    # 创建维诺图的彩色显示
+    voronoi_colored = np.zeros((*cls_bg_np.shape, 3))
+    unique_regions = np.unique(cls_bg_np)
+    
+    for i, region_id in enumerate(unique_regions):
+        if region_id == 15:  # 背景区域用白色
+            voronoi_colored[cls_bg_np == region_id] = [1, 1, 1]
+        elif region_id == -1:  # 无效区域用黑色
+            voronoi_colored[cls_bg_np == region_id] = [0, 0, 0]
+        else:  # 其他区域用不同颜色
+            color_idx = i % len(colors) if colors is not None else i % 10
+            region_color = colors[color_idx][:3] if colors is not None else plt.cm.tab10(color_idx)[:3]
+            voronoi_colored[cls_bg_np == region_id] = region_color
+    
+    # 绘制维诺图边界
+    voronoi_boundary = np.zeros_like(cls_bg_np, dtype=bool)
+    for region_id in unique_regions:
+        if region_id != 15 and region_id != -1:  # 排除背景和无效区域
+            region_mask = (cls_bg_np == region_id)
+            # 使用形态学操作找到边界
+            dilated = ndimage.binary_dilation(region_mask, structure=np.ones((3, 3)))
+            boundary = dilated & ~region_mask
+            voronoi_boundary |= boundary
+    
+    ax.imshow(voronoi_colored)
+    # 在维诺图上叠加边界
+    if voronoi_boundary.any():
+        y_coords, x_coords = np.where(voronoi_boundary)
+        ax.scatter(x_coords, y_coords, c='red', s=0.5, alpha=0.8)
+    
+    ax.set_title('纯维诺图', fontsize=12, fontweight='bold')
+    ax.axis('off')
+    
+    # === 第一行第三列：纯分水岭图 ===
+    ax = axes[0, 2]
+    # 创建分水岭结果的彩色显示
+    watershed_colored = np.zeros((*markers_np.shape, 3))
+    unique_markers = np.unique(markers_np)
+    
+    for i, marker_id in enumerate(unique_markers):
+        if marker_id <= 0:  # 背景和边界用黑色
+            watershed_colored[markers_np == marker_id] = [0, 0, 0]
         else:
-            plt.imshow(img, cmap='viridis' if i > 0 else None)
-            if i == 1:
-                plt.title('类别背景图', fontsize=10)
-            elif i == 2:
-                plt.title('分水岭结果', fontsize=10)
-        
-        plt.xticks([])
-        plt.yticks([])
+            color_idx = (marker_id - 1) % len(colors) if colors is not None else (marker_id - 1) % 10
+            marker_color = colors[color_idx][:3] if colors is not None else plt.cm.tab10(color_idx)[:3]
+            watershed_colored[markers_np == marker_id] = marker_color
     
-    # 调整布局以容纳图例
+    ax.imshow(watershed_colored)
+    ax.set_title('纯分水岭图', fontsize=12, fontweight='bold')
+    ax.axis('off')
+    
+    # === 第二行第一列：模糊后的图 ===
+    ax = axes[1, 0]
+    if blurred_image is not None:
+        if blurred_image.dim() == 3:
+            blur_img = blurred_image.permute(1, 2, 0).detach().cpu().numpy()
+        else:
+            blur_img = blurred_image.detach().cpu().numpy()
+        blur_img = (blur_img - blur_img.min()) / (blur_img.max() - blur_img.min())
+        ax.imshow(blur_img, cmap='gray' if len(blur_img.shape) == 2 else None)
+        ax.set_title('模糊后的图', fontsize=12, fontweight='bold')
+    else:
+        ax.imshow(orig_img, cmap='gray' if len(orig_img.shape) == 2 else None)
+        ax.set_title('模糊后的图 (未提供)', fontsize=12, fontweight='bold')
+    ax.axis('off')
+    
+    # === 第二行第二列：原图覆盖维诺图边界 ===
+    ax = axes[1, 1]
+    ax.imshow(orig_img, cmap='gray' if len(orig_img.shape) == 2 else None)
+    
+    # 正确绘制维诺图边界 - 参考纯维诺图的方法
+    if voronoi_boundary.any():
+        y_coords, x_coords = np.where(voronoi_boundary)
+        ax.scatter(x_coords, y_coords, c='red', s=0.8, alpha=0.9, marker='s')
+    
+    ax.set_title('原图+维诺图边界', fontsize=12, fontweight='bold')
+    ax.axis('off')
+    
+    # === 第二行第三列：分水岭图的mask覆盖原图 ===
+    ax = axes[1, 2]
+    ax.imshow(orig_img, cmap='gray' if len(orig_img.shape) == 2 else None)
+    
+    # 创建分水岭mask的透明叠加
+    if labels is not None and colors is not None:
+        labels_np = labels.detach().cpu().numpy()
+        unique_labels = np.unique(labels_np)
+        
+        # 为每个类别创建透明mask并叠加显示
+        for idx, label in enumerate(unique_labels):
+            # 找到属于该类别的实例索引
+            class_instances = np.where(labels_np == label)[0]
+            
+            # 创建该类别的总mask
+            class_mask = np.zeros_like(markers_np, dtype=bool)
+            for instance_idx in class_instances:
+                # markers中实例的标签是从1开始的
+                instance_mask = (markers_np == instance_idx + 1)
+                class_mask |= instance_mask
+            
+            if class_mask.any():
+                # 创建彩色透明mask
+                color_rgba = colors[idx % len(colors)]
+                
+                # 创建RGBA图像用于透明叠加
+                overlay = np.zeros((*class_mask.shape, 4))
+                overlay[class_mask] = [*color_rgba[:3], 0.6]  # 60% 透明度
+                
+                # 叠加显示
+                ax.imshow(overlay, alpha=0.8)
+    
+    ax.set_title('分水岭mask+原图', fontsize=12, fontweight='bold')
+    ax.axis('off')
+    
+    # 创建图例（放在整个图的右侧）
+    if labels is not None and colors is not None:
+        labels_np = labels.detach().cpu().numpy()
+        unique_labels = np.unique(labels_np)
+        legend_patches = []
+        
+        for idx, label in enumerate(unique_labels):
+            if class_names is not None and label < len(class_names):
+                class_name = class_names[label]
+            else:
+                class_name = f'类别 {label}'
+            
+            color_rgba = colors[idx % len(colors)]
+            legend_patches.append(
+                mpatches.Patch(color=color_rgba[:3], 
+                             label=class_name, alpha=0.7)
+            )
+        
+        # 将图例放在整个图的右侧
+        if legend_patches:
+            fig.legend(handles=legend_patches, 
+                      bbox_to_anchor=(1.02, 0.5), 
+                      loc='center left',
+                      fontsize=10, 
+                      fancybox=True, 
+                      shadow=True)
+    
+    # 调整布局
     plt.tight_layout()
     plt.subplots_adjust(right=0.85)  # 为图例留出空间
     
+    # 保存图片
     timestamp = time.strftime("%Y%m%d-%H%M%S")
-    plt.savefig(f'debug/{timestamp}-Gaussian-Voronoi.png', 
+    plt.savefig(f'debug/{timestamp}-Gaussian-Voronoi-2x3.png', 
                 dpi=300, bbox_inches='tight', facecolor='white')
     plt.close()
+
+
+
+
 
 def gaussian_voronoi_watershed_loss(mu, sigma,
                                     label, image, 
                                     pos_thres, neg_thres, 
                                     close_mask=None,
+                                    large_scale_classes=None,  # 新增参数
+                                    kernel_size=5,             # 新增参数
+                                    gaussian_sigma=1.0,            # 新增参数（重命名避免冲突）
                                     down_sample=2, topk=0.95, 
                                     default_sigma=4096,
                                     voronoi='gaussian-orientation',
@@ -386,6 +444,12 @@ def gaussian_voronoi_watershed_loss(mu, sigma,
             print(f"[DEBUG] close_mask shape={close_mask.shape}, sum={close_mask.sum().item()}")
         else:
             print("[DEBUG] No close_mask provided")
+        if large_scale_classes:
+            print(f"[DEBUG] Large scale classes: {large_scale_classes}")
+    
+    # 如果large_scale_classes为None，则设为空列表
+    if large_scale_classes is None:
+        large_scale_classes = []
     
     D = down_sample
     H, W = image.shape[-2:]
@@ -431,22 +495,12 @@ def gaussian_voronoi_watershed_loss(mu, sigma,
         new_labels = []
         
         for group_idx, group in enumerate(merge_groups):
-            if len(group) > 1:  # 需要合并的组
-                # 合并策略：可以选择不同的合并方式
-                # 方案1：使用第一个实例的参数
+            if len(group) > 1: 
                 representative_idx = group[0]
                 new_mu.append(effective_mu[representative_idx])
                 new_sigma.append(effective_sigma[representative_idx])
                 new_labels.append(effective_labels[representative_idx])
                 new_active_instances.append(representative_idx)
-                
-                # 方案2：使用加权平均（可选）
-                # group_mu = torch.stack([effective_mu[i] for i in group]).mean(0)
-                # group_sigma = torch.stack([effective_sigma[i] for i in group]).mean(0)
-                # new_mu.append(group_mu)
-                # new_sigma.append(group_sigma)
-                # new_labels.append(effective_labels[group[0]])
-                # new_active_instances.append(group[0])
                 
                 if debug:
                     print(f"[DEBUG] Merged group {group} -> using instance {representative_idx}")
@@ -514,16 +568,71 @@ def gaussian_voronoi_watershed_loss(mu, sigma,
     cls_bg = torch.where(vor == 0, -1, cls_bg)
 
     # PyTorch does not support watershed, use cv2
+    
+    
+    original_img_tensor = image.clone()
+    # 继续原有的median blur
     img_uint8 = (image - image.min()) / (image.max() - image.min()) * 255
     img_uint8 = img_uint8.permute(1, 2, 0).detach().cpu().numpy().astype(np.uint8)
+    
     img_uint8 = cv2.medianBlur(img_uint8, 3)
+    # 保存原始图像用于可视化
+    
+    # === 对大尺度目标的区域进行高斯模糊 ===
+    blurred_img_tensor = None
+    if large_scale_classes and len(large_scale_classes) > 0:
+        if debug:
+            print(f"[DEBUG] Applying Gaussian blur to large scale objects...")
+        
+        # 创建大尺度目标的mask
+        large_scale_mask = np.zeros((H, W), dtype=bool)
+        cls_np = cls.detach().cpu().numpy()
+        
+        for class_id in large_scale_classes:
+            class_mask = (cls_np == class_id)
+            large_scale_mask |= class_mask
+            if debug and class_mask.any():
+                print(f"[DEBUG] Found {class_mask.sum()} pixels for large scale class {class_id}")
+        
+        if large_scale_mask.any():
+            if debug:
+                print(f"[DEBUG] Total large scale pixels: {large_scale_mask.sum()}")
+            
+            # 对大尺度目标区域应用高斯模糊
+            if kernel_size % 2 == 0:
+                kernel_size += 1
+            
+            # 分别对每个通道进行高斯模糊
+            for channel in range(img_uint8.shape[2]):
+                channel_img = img_uint8[:, :, channel].copy()
+                
+                blurred_channel = cv2.GaussianBlur(
+                    channel_img, 
+                    (kernel_size, kernel_size), 
+                    gaussian_sigma
+                )
+                
+                img_uint8[large_scale_mask, channel] = blurred_channel[large_scale_mask]
+            
+            # 创建模糊后的图像张量用于可视化
+            blurred_img_tensor = torch.from_numpy(img_uint8.astype(np.float32) / 255.0).permute(2, 0, 1).to(image.device)
+            
+            if debug:
+                print(f"[DEBUG] Applied Gaussian blur with kernel_size={kernel_size}, gaussian_sigma={gaussian_sigma}")
+    
+    
     markers = vor.detach().cpu().numpy().astype(np.int32)
     markers = vor.new_tensor(cv2.watershed(img_uint8, markers))
     
     if debug:
-        # 传递合并后的标签给可视化函数
-        plot_gaussian_voronoi_watershed(image, cls_bg, markers, labels=effective_labels)
-
+        # 使用新的可视化函数
+        plot_gaussian_voronoi_watershed(
+            original_image=original_img_tensor,
+            cls_bg=cls_bg, 
+            markers=markers, 
+            blurred_image=blurred_img_tensor,
+            labels=effective_labels
+        ) 
     # 计算损失时需要考虑原始实例和有效实例的映射关系
     L, V = torch.linalg.eigh(sigma)  # 使用原始sigma计算损失
     L_target = []
@@ -567,7 +676,7 @@ def gaussian_voronoi_watershed_loss(mu, sigma,
     return loss, (vor, markers)
 
 
-# 同样需要修正 VoronoiWatershedLoss 的 forward 方法
+
 @MODELS.register_module()
 class VoronoiWatershedLoss(nn.Module):
     """Voronoi Watershed Loss.
@@ -577,6 +686,10 @@ class VoronoiWatershedLoss(nn.Module):
             a scalar. Defaults to 'mean'. Options are "none", "mean" and
             "sum".
         loss_weight (float, optional): Weight of loss. Defaults to 1.0.
+        large_scale_classes (list, optional): List of class indices that are 
+            considered as large scale objects. Defaults to None.
+        kernel_size (int, optional): Kernel size for Gaussian blur. Defaults to 5.
+        sigma (float, optional): Standard deviation for Gaussian blur. Defaults to 1.0.
 
     Returns:
         loss (torch.Tensor)
@@ -588,6 +701,9 @@ class VoronoiWatershedLoss(nn.Module):
                  loss_weight=1.0,
                  topk=0.95,
                  alpha=0.1,
+                 large_scale_classes=None,  # 新增：大尺度类别列表
+                 kernel_size=5,             # 新增：高斯模糊核大小
+                 gaussian_sigma=1.0,                 # 新增：高斯模糊标准差
                  debug=False):
         super(VoronoiWatershedLoss, self).__init__()
         self.down_sample = down_sample
@@ -595,6 +711,9 @@ class VoronoiWatershedLoss(nn.Module):
         self.loss_weight = loss_weight
         self.topk = topk
         self.alpha = alpha
+        self.large_scale_classes = large_scale_classes or []  # 如果为None则设为空列表
+        self.kernel_size = kernel_size
+        self.gaussian_sigma = gaussian_sigma
         self.debug = debug
 
     def forward(self, pred, label, image, pos_thres, neg_thres, 
@@ -618,19 +737,24 @@ class VoronoiWatershedLoss(nn.Module):
         Returns:
             torch.Tensor: The calculated loss
         """
+        
         loss, self.vis = gaussian_voronoi_watershed_loss(
             *pred, 
             label,
             image, 
             pos_thres, 
             neg_thres, 
-            close_mask=close_mask,  # 使用关键字参数传递
+            close_mask=close_mask,
+            large_scale_classes=self.large_scale_classes,  # 传递大尺度类别
+            kernel_size=self.kernel_size,                  # 传递核大小
+            gaussian_sigma=self.gaussian_sigma,                              # 传递标准差
             down_sample=self.down_sample, 
             topk=self.topk,
             voronoi=voronoi,
             alpha=self.alpha,
             debug=self.debug)
         return self.loss_weight * loss
+
 
 def rbbox2roi(bbox_list):
     """Convert a list of bboxes to roi format.
