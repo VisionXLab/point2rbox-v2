@@ -111,6 +111,14 @@ class Point2RBoxV2Head(AnchorFreeHead):
                              name='conv_gate',
                              std=0.01,
                              bias_prob=0.01)]),
+                close_instance_config: ConfigType = dict(
+                 enabled=True,
+                 distance_threshold=30,
+                 class_pairs=[
+                     ('soccer-ball-field', 'ground-track-field'),
+                     # 可以添加更多类别对
+                 ]
+             ),
                  **kwargs):
         self.angle_coder = TASK_UTILS.build(angle_coder)
         super().__init__(
@@ -139,6 +147,31 @@ class Point2RBoxV2Head(AnchorFreeHead):
         self.loss_overlap = MODELS.build(loss_overlap)
         self.loss_voronoi = MODELS.build(loss_voronoi)
         self.loss_bbox_edg = MODELS.build(loss_bbox_edg)
+            
+        # 添加close_instance_config的处理
+        self.close_instance_config = close_instance_config
+        
+        # 将类别名称转换为类别ID的映射
+        # 从配置中获取类别名称到ID的映射，如果没有配置则使用默认的DOTA映射
+        self.class_name_to_id = self.close_instance_config.get('class_name_to_id', {
+            'plane': 0, 'baseball-diamond': 1, 'bridge': 2, 'ground-track-field': 3,
+            'small-vehicle': 4, 'large-vehicle': 5, 'ship': 6, 'tennis-court': 7,
+            'basketball-court': 8, 'storage-tank': 9, 'soccer-ball-field': 10, 
+            'roundabout': 11, 'harbor': 12, 'swimming-pool': 13, 'helicopter': 14
+        })
+        
+        # 预处理类别对，转换为ID对
+        self.close_class_pairs = []
+        if self.close_instance_config.get('enabled', False):
+            for class_pair in self.close_instance_config.get('class_pairs', []):
+                if len(class_pair) == 2:
+                    id1 = self.class_name_to_id.get(class_pair[0])
+                    id2 = self.class_name_to_id.get(class_pair[1])
+                    if id1 is not None and id2 is not None:
+                        self.close_class_pairs.append((id1, id2))
+                        self.close_class_pairs.append((id2, id1))  # 双向映射
+
+
             
     def _init_layers(self):
         """Initialize layers of the head."""
@@ -190,6 +223,41 @@ class Point2RBoxV2Head(AnchorFreeHead):
 
         return (cls_score,), (bbox_pred,), (angle_pred,)
     
+    
+    def _compute_close_instance_mask(self, mu, labels):
+        """计算哪些实例对应该被视为接近的实例对"""
+        if not self.close_instance_config.get('enabled', False):
+            return None
+            
+        distance_threshold = self.close_instance_config.get('distance_threshold', 30)
+        n_instances = len(mu)
+        close_mask = torch.zeros(n_instances, n_instances, dtype=torch.bool, device=mu.device)
+        
+        for i in range(n_instances):
+            for j in range(i + 1, n_instances):
+                # 检查类别是否匹配
+                label_pair = (labels[i].item(), labels[j].item())
+                if label_pair in self.close_class_pairs:
+                    # 计算距离
+                    distance = torch.norm(mu[i] - mu[j])
+                    if distance < distance_threshold:
+                        close_mask[i, j] = True
+                        close_mask[j, i] = True
+                        # 打印成功匹配的实例对
+                        print(f"匹配的实例对: {label_pair}, 距离: {distance.item()}")
+                    else:
+                        print(f"未匹配的实例对: {label_pair}, 距离: {distance.item()}")
+                        # Visualize the unmatched instance pairs
+                        import matplotlib.pyplot as plt
+                        plt.figure(figsize=(6, 6))
+                        plt.scatter(mu[:, 0].cpu(), mu[:, 1].cpu(), c=labels.cpu(), cmap='tab10', s=50)
+                        plt.plot([mu[i, 0].cpu(), mu[j, 0].cpu()], [mu[i, 1].cpu(), mu[j, 1].cpu()], 'r--')
+                        plt.title(f"Unmatched Pair: {label_pair}, Distance: {distance.item():.2f}")
+                        plt.show()
+        
+        return close_mask
+
+
     def loss_by_feat(
         self,
         cls_scores: List[Tensor],
@@ -226,6 +294,9 @@ class Point2RBoxV2Head(AnchorFreeHead):
         Returns:
             dict[str, Tensor]: A dictionary of loss components.
         """
+        
+        
+        
         assert len(cls_scores) == len(bbox_preds) == len(angle_preds)
         featmap_sizes = [featmap.size()[-2:] for featmap in cls_scores]
         all_level_points = self.prior_generator.grid_priors(
@@ -358,14 +429,20 @@ class Point2RBoxV2Head(AnchorFreeHead):
             ori_mu_all = ins_rbox_targets[:, 0:2]
             loss_bbox_ovl = ori_mu_all.new_tensor(0)
             loss_bbox_vor = ori_mu_all.new_tensor(0)
+
             for batch_id in range(len(batch_gt_instances)):
                 group_mask = (ins_batch == batch_id) & (ins_bids != 0)
                 # Overlap and Voronoi Losses
                 mu = ori_mu_all[group_mask]
                 sigma = ins_gaus_preds[group_mask]
                 label = ins_labels[group_mask]
+                
                 if len(mu) >= 2:
-                    loss_bbox_ovl += self.loss_overlap((mu, sigma.bmm(sigma)))
+                    # 计算接近实例mask
+                    close_mask = self._compute_close_instance_mask(mu, label)
+                    loss_bbox_ovl += self.loss_overlap((mu, sigma.bmm(sigma)), close_mask=close_mask)
+    
+                
                 if len(mu) >= 1:
                     pos_thres = [self.voronoi_thres['default'][0]] * self.num_classes
                     neg_thres = [self.voronoi_thres['default'][1]] * self.num_classes
@@ -374,10 +451,14 @@ class Point2RBoxV2Head(AnchorFreeHead):
                             for cls in item[0]:
                                 pos_thres[cls] = item[1][0]
                                 neg_thres[cls] = item[1][1]
+                    
+                    # 计算接近实例mask并传递给voronoi loss
+                    close_mask = self._compute_close_instance_mask(mu, label) if len(mu) >= 2 else None
                     loss_bbox_vor += self.loss_voronoi((mu, sigma.bmm(sigma)),
-                                                       label, self.images[batch_id],
-                                                       pos_thres, neg_thres,
-                                                       voronoi=self.voronoi_type)
+                                                    label, self.images[batch_id],
+                                                    pos_thres, neg_thres,
+                                                    voronoi=self.voronoi_type,
+                                                    close_mask=close_mask)
                     self.vis[batch_id] = self.loss_voronoi.vis
             
             #  Batched RBox for Edge Loss

@@ -56,6 +56,19 @@ model = dict(
             dual_freq=False,
             num_step=3,
             thr_mod=0),
+        close_instance_config=dict(
+            enabled=True,                    # 是否启用该功能
+            distance_threshold=50,           # 距离阈值，默认50
+            class_name_to_id={               # 类别名称到ID的映射
+                'plane': 0, 'baseball-diamond': 1, 'bridge': 2, 'ground-track-field': 3,
+                'small-vehicle': 4, 'large-vehicle': 5, 'ship': 6, 'tennis-court': 7,
+                'basketball-court': 8, 'storage-tank': 9, 'soccer-ball-field': 10, 
+                'roundabout': 11, 'harbor': 12, 'swimming-pool': 13, 'helicopter': 14
+            },
+            class_pairs=[                    # 类别对列表
+                ('soccer-ball-field', 'ground-track-field'),  # 足球场和田径场
+            ]
+        ),
         loss_cls=dict(
             type='mmdet.FocalLoss',
             use_sigmoid=True,
@@ -64,9 +77,13 @@ model = dict(
             loss_weight=1.0),
         loss_bbox=dict(type='GDLoss', loss_type='gwd', loss_weight=5.0),
         loss_overlap=dict(
-            type='GaussianOverlapLoss', loss_weight=10.0, lamb=0),
+            type='GaussianOverlapLoss', loss_weight=10.0, lamb=0
+            # ,debug=True
+            ),
         loss_voronoi=dict(
-            type='VoronoiWatershedLoss', loss_weight=5.0),
+            type='VoronoiWatershedLoss', loss_weight=5.0
+            # ,debug=True
+            ),
         loss_bbox_edg=dict(
             type='EdgeLoss', loss_weight=0.3),
         loss_ss=dict(
@@ -94,7 +111,7 @@ train_pipeline = [
     dict(type='mmdet.PackDetInputs')
 ]
 
-train_dataloader = dict(batch_size=2,
+train_dataloader = dict(batch_size=1,
                         dataset=dict(pipeline=train_pipeline))
 
 # optimizer
@@ -106,5 +123,5 @@ optim_wrapper = dict(
         betas=(0.9, 0.999),
         weight_decay=0.05))
 
-train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=12, val_interval=12)
+train_cfg = dict(type='EpochBasedTrainLoop', max_epochs=100, val_interval=10)
 custom_hooks = [dict(type='mmdet.SetEpochInfoHook')]
