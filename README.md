@@ -49,6 +49,8 @@ This repository contains our series of work on weakly-supervised OOD.
 
 </details>
 
+We don't provide checkpoints in this repository. Some reproduced results and checkpoints can be found in [ai4rs](https://github.com/wokaikaixinxin/ai4rs).
+
 ## Data Preparation
 Please refer to [data_preparation.md](tools/data/README.md) to prepare the data.
 
