@@ -49,7 +49,7 @@ This repository contains our series of work on weakly-supervised OOD.
 
 </details>
 
-Some reproduced results and checkpoints can be found in [ai4rs](https://github.com/wokaikaixinxin/ai4rs).
+Some of our methods are incorporated by [ai4rs](https://github.com/wokaikaixinxin/ai4rs), a tool kit for evaluating remote sensing work. Reproduced results and checkpoints can be found there.
 
 ## Data Preparation
 Please refer to [data_preparation.md](tools/data/README.md) to prepare the data.
