@@ -68,11 +68,12 @@ This project is based on MMRotate, an open source project that is contributed by
   year={2025},
   journal={IEEE Transactions on Pattern Analysis and Machine Intelligence},
 }
-@article{yu2025point2rboxv2,
+@inproceedings{yu2025point2rboxv2,
   title={Point2RBox-v2: Rethinking Point-supervised Oriented Object Detection with Spatial Layout Among Instances}, 
   author={Yi Yu and Botao Ren and Peiyuan Zhang and Mingxin Liu and Junwei Luo and Shaofeng Zhang and Feipeng Da and Junchi Yan and Xue Yang},
+  booktitle={IEEE/CVF Conference on Computer Vision and Pattern Recognition},
+  pages={19283--19293},
   year={2025},
-  journal={arXiv preprint arXiv:2502.04268},
 }
 @inproceedings{yu2024point2rbox,
   title={Point2RBox: Combine Knowledge from Synthetic Visual Patterns for End-to-end Oriented Object Detection with Single Point Supervision},
@@ -84,7 +85,7 @@ This project is based on MMRotate, an open source project that is contributed by
 @inproceedings{yu2023h2rboxv2,
   author={Yi Yu and Xue Yang and Qingyun Li and Yue Zhou and Feipeng Da and Junchi Yan},
   title={H2RBox-v2: Incorporating Symmetry for Boosting Horizontal Box Supervised Oriented Object Detection}, 
-  booktitle={Advances in Neural Information Processing Systems},
+  booktitle={Neural Information Processing Systems},
   year={2023},
 }
 @inproceedings{yang2023h2rbox,
