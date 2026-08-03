@@ -21,6 +21,8 @@
   </p>
 </p>
 
+> A Jittor implementation of Point2RBox-v2 is available at [VisionXLab/Point2RBox-v2-jittor](https://github.com/VisionXLab/Point2RBox-v2-jittor).
+
 ## Introduction
 We develop **Point2RBox-v2** (Rethinking Point-supervised Oriented Object Detection with Spatial Layout Among Instances). In this paper, we rethink this challenging task setting with the layout among instances. At the core are three principles: 1) Gaussian overlap loss. It learns an upper bound for each instance by treating objects as 2D Gaussian distributions and minimizing their overlap. 2) Voronoi watershed loss. It learns a lower bound for each instance through watershed on Voronoi tessellation. 3) Consistency loss. It learns the size/rotation variation between two output sets with respect to an input image and its augmented view. Supplemented by a few devised techniques, e.g. edge loss and copy-paste, the detector is further enhanced.
 
@@ -96,4 +98,3 @@ This project is based on MMRotate, an open source project that is contributed by
   year={2023}
 }
 ```
-
