@@ -13,6 +13,7 @@
     <div align="center">
       <a href='https://arxiv.org/abs/2502.04268'><img src='https://img.shields.io/badge/arXiv-2502.04268-brown.svg?logo=arxiv&logoColor=white'></a>
       <a href='https://zhuanlan.zhihu.com/p/21748498041'><img src='https://img.shields.io/badge/Zhihu-Chinese_Article-blue.svg?logo=zhihu&logoColor=white'></a>
+      <a href='https://github.com/VisionXLab/Point2RBox-v2-jittor'><img src='https://img.shields.io/badge/Jittor-Implementation-red.svg?logo=github&logoColor=white'></a>
     </div>
     <p align='center'>
       If you find our work helpful, please consider giving us a ⭐!
@@ -95,5 +96,4 @@ This project is based on MMRotate, an open source project that is contributed by
   year={2023}
 }
 ```
-
 
